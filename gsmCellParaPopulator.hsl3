@@ -1,0 +1,109 @@
+﻿#encoding=utf-8
+''' 2020-04-03: The script takes around 4 days to scroll through 5500 GCells.
+    2020-04-16: Included BTS ID parameter.
+    2020-12-11: CGI Calculator integration. 
+    2020-12-23: CGI Calculator error correction (15 digits to 16 digits) '''
+# ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
+
+# ----------------------------------------------------------VARIABLES----------------------------------------------------------#
+bscserverip = '172.16.121.41'
+dbuser = 'sitedb'
+dbpassword = 'BSCAltice.123'
+btsidx = []
+egbtsname = []
+gcellidx = []
+gcellid = []
+gcellname = []
+band = []
+lac = []
+ncc = []
+bcc = []
+mccmnc = "0073f010"
+# ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
+def gsmcellparadbupdate(btsidxf, egbtsnamef, bscnamef, gcellidxf, gcellidf, gcellnamef, bandf, lacf, nccf, bccf, hsnf, racf, anif, cgi)
+    # We use REPLACE command because it acts as an INSERT when the data doesn't exists.
+    Print('Connected! Populating Site ' + egbtsnamef + ' and cell ' + gcellidf + ' GSM info.')
+    query = "REPLACE INTO alticedr_sitedb.gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`) VALUES (" + btsidxf + ", '" + egbtsnamef + "', '" + bscnamef + "', " + gcellidxf + ", " + gcellidf + ", '" + gcellnamef + "', '" + bandf + "', " + lacf + ", " + nccf + ", " + bccf + ", " + hsnf + ", " + racf + ", " + anif + ", '" + cgi + "'" + ");"
+    ExecuteCmd(ssh, query)
+    Print(StrfTime("%Y%m%d:%H%M%S:") + query)
+end
+# -----------------------------------------------------------MAINCODE----------------------------------------------------------#
+# Get NE list by type
+NEList = GetNELstByType('BSC6910 GSM')
+# Open the connection
+ssh = OpenSSH(bscserverip, dbuser, dbpassword)
+if IsConnected(ssh) == True
+    Print(StrfTime("%Y%m%d:%H%M%S:") + 'SSH Connection Ready!')
+    # Connect to the DB
+    ExecuteCmd(ssh, 'mysql -u ' + dbuser + ' -p' + dbpassword + ' alticedr_sitedb')
+    # Loop through the NE list
+    for ne in NEList
+        # Check if NE is online before connecting
+        if GetNEStatus(ne) == 1
+            Print(StrfTime("%Y%m%d:%H%M%S:") + ne + ' is online!')
+            # Connect to the NE on loop
+            ConnectNE(ne)
+            Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected to ' + ne)
+            # List all GCELL information on the BSC
+            ClearMMLBuffer()
+            @LST GCELL:;
+            gcellreport = GetAllMMLReport()
+            # Loop through all the output reports of the LST GCELL
+            for report in gcellreport
+                gcellreportparse = ParseMMLRpt(report)
+                btsidx = GetColumnByIndex(gcellreportparse, 0, 31)
+                egbtsname = GetColumnByIndex(gcellreportparse, 0, 32)
+                gcellidx = GetColumnByIndex(gcellreportparse, 0, 0)
+                gcellid = GetColumnByIndex(gcellreportparse, 0, 28)
+                gcellname = GetColumnByIndex(gcellreportparse, 0, 1)
+                band = GetColumnByIndex(gcellreportparse, 0, 2)
+                lac = GetColumnByIndex(gcellreportparse, 0, 5)
+                ncc = GetColumnByIndex(gcellreportparse, 0, 7)
+                bcc = GetColumnByIndex(gcellreportparse, 0, 8)
+            end
+            ClearMMLBuffer()
+            # Loop through all GCELLGPRS and GCELLMAGRP to get RAC and HSN
+            for i in range(len(gcellidx))
+                # Get the RAC for the cell
+                SendMML('LST GCELLGPRS:IDTYPE=BYID,CELLID=' + gcellidx[i] + ';')
+                racreportparse = ParseMMLRpt(GetMMLReport(0))
+                rac = GetAttrValueByIdx(racreportparse, 0, 10, 0)
+                ClearMMLBuffer()
+                # Get the HSN for the cell
+                SendMML('LST GCELLMAGRP:IDTYPE=BYID,CELLID=' + gcellidx[i] + ';')
+                hsnreportparse = ParseMMLRpt(GetMMLReport(0))
+                hsn = GetAttrValueByIdx(hsnreportparse, 0, 3, 0)
+                ClearMMLBuffer()
+                # Get the ANI
+                SendMML('LST ADJNODE:LSTTYPE=BYNAME,NAME="' + egbtsname[i] + '";')
+                anireportparse = ParseMMLRpt(GetMMLReport(0))
+                ani = GetAttrValueByIdx(anireportparse, 0, 0, 0)
+                # Pass all data to the provisioning function
+                Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function')
+                lactemp = lac[i]
+                lacdec = lactemp[7:12]
+                lacHex = str(hex(int(lacdec)))[2:]
+                # CGI Lac must be 4 hex digits
+                while len(lacHex) < 4
+                    lacHex = "0" + lacHex
+                end
+                gCellIdHex = str(hex(int(gcellid[i])))[2:]
+                # CGI CI must be 4 digits
+                while len(gCellIdHex) < 4
+                    gCellIdHex = "0" + gCellIdHex
+                end
+                cgi = mccmnc + lacHex + gCellIdHex
+                gsmcellparadbupdate(btsidx[i], egbtsname[i], ne, gcellidx[i], gcellid[i], gcellname[i], band[i], lacdec, ncc[i], bcc[i], hsn, rac, ani, cgi)
+            end
+        # If NE is not connected, then...
+        else
+            Print(StrfTime("%Y%m%d:%H%M%S:") + ne + " is offline.")
+        end
+    # End initial FOR loop
+    end
+else
+    Print(StrfTime("%Y%m%d:%H%M%S:") + 'SSH Connection Failed!')
+end
+# Close the connection. 
+CloseSSH(ssh)
+Print("Finished!")
