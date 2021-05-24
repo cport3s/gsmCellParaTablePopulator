@@ -4,6 +4,7 @@
     2020-12-11: CGI Calculator integration. 
     2020-12-23: CGI Calculator error correction (15 digits to 16 digits) 
     2021-02-25: Implement new db provisioning method and new siteid db parameter.
+	2021-05-21: 
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -52,7 +53,7 @@ def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gB
             # Close the query and execute on database
             query += ";"
             # We use REPLACE command because it acts as an INSERT when the data doesn't exists.
-            ExecuteCmd(ssh, query)
+            #ExecuteCmd(ssh, query)
             Print(StrfTime("%Y%m%d:%H%M%S:") + query)
             # Restart the query string
             query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`) VALUES "
@@ -68,7 +69,8 @@ if IsConnected(ssh) == True
     # Connect to the DB
     ExecuteCmd(ssh, 'mysql -u ' + dbuser + ' -p' + dbpassword + ' alticedr_sitedb')
     # Get NE list by type
-    NEList = GetNELstByType('BSC6910 GSM')
+    #NEList = GetNELstByType('BSC6910 GSM')
+	NEList = ['BSC_06_STGO']
     # Loop through the NE list
     for ne in NEList
         # Check if NE is online before connecting
