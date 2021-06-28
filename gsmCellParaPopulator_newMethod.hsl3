@@ -130,8 +130,14 @@ if IsConnected(ssh) == True
                 # Get the HSN for the cell
                 SendMML('LST GCELLMAGRP:IDTYPE=BYID,CELLID=' + gcellidx[i] + ';')
                 hsnreportparse = ParseMMLRpt(GetMMLReport(0))
-                hsn.append(GetAttrValueByName(hsnreportparse, 0, 'Hop Index', 0))
-                ClearMMLBuffer()
+				hsnReportNumber = GetRecordNum(hsnreportparse, 0)
+				# Check to see if there's any GCELLMAGRP configured.
+				if hsnReportNumber != 0
+					hsn.append(GetAttrValueByName(hsnreportparse, 0, 'HSN', 0))
+				else
+					hsn.append('65535')
+				end
+				ClearMMLBuffer()
                 # Get the ANI
                 SendMML('LST ADJNODE:LSTTYPE=BYNAME,NAME="' + egbtsname[i] + '";')
                 anireportparse = ParseMMLRpt(GetMMLReport(0))
