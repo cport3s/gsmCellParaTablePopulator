@@ -4,7 +4,7 @@
     2020-12-11: CGI Calculator integration. 
     2020-12-23: CGI Calculator error correction (15 digits to 16 digits) 
     2021-02-25: Implement new db provisioning method and new siteid db parameter.
-	2021-05-21: 
+    2021-06-28: Check if GCELLMAGRP is configured.
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -69,8 +69,8 @@ if IsConnected(ssh) == True
     # Connect to the DB
     ExecuteCmd(ssh, 'mysql -u ' + dbuser + ' -p' + dbpassword + ' alticedr_sitedb')
     # Get NE list by type
-    #NEList = GetNELstByType('BSC6910 GSM')
-	NEList = ['BSC_06_STGO']
+    NEList = GetNELstByType('BSC6910 GSM')
+    #NEList = ['BSC_06_STGO']
     # Loop through the NE list
     for ne in NEList
         # Check if NE is online before connecting
@@ -130,24 +130,28 @@ if IsConnected(ssh) == True
                 # Get the HSN for the cell
                 SendMML('LST GCELLMAGRP:IDTYPE=BYID,CELLID=' + gcellidx[i] + ';')
                 hsnreportparse = ParseMMLRpt(GetMMLReport(0))
-				hsnReportNumber = GetRecordNum(hsnreportparse, 0)
-				# Check to see if there's any GCELLMAGRP configured.
-				if hsnReportNumber != 0
-					hsn.append(GetAttrValueByName(hsnreportparse, 0, 'HSN', 0))
-				else
-					hsn.append('65535')
-				end
-				ClearMMLBuffer()
+                hsnReportNumber = GetRecordNum(hsnreportparse, 0)
+                # Check to see if there's any GCELLMAGRP configured.
+                if hsnReportNumber != 0
+                    hsn.append(GetAttrValueByName(hsnreportparse, 0, 'HSN', 0))
+                else
+                    hsn.append('65535')
+                end
+                ClearMMLBuffer()
                 # Get the ANI
                 SendMML('LST ADJNODE:LSTTYPE=BYNAME,NAME="' + egbtsname[i] + '";')
                 anireportparse = ParseMMLRpt(GetMMLReport(0))
-                ani.append(GetAttrValueByName(anireportparse, 0, 'Adjacent Node ID', 0))
+				aniReportNumber = GetRecordNum(anireportparse, 0)
+				if aniReportNumber != 0
+					ani.append(GetAttrValueByName(anireportparse, 0, 'Adjacent Node ID', 0))
+				else
+					ani.append('65535')
+				end
                 ClearMMLBuffer()
                 # Find the content between the parenthesis
                 glacFindCharStart = ToString(lac[i])[1].find('(') + 1
                 glacFindCharEnd = ToString(lac[i])[1].find(')')
                 lac[i] = lac[i][glacFindCharStart:glacFindCharEnd]
-                ClearMMLBuffer()
             end
             # Pass all data to the provisioning function
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function on ' + ne)
