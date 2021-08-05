@@ -5,6 +5,7 @@
     2020-12-23: CGI Calculator error correction (15 digits to 16 digits) 
     2021-02-25: Implement new db provisioning method and new siteid db parameter.
     2021-06-28: Check if GCELLMAGRP is configured.
+	2021-08-05: Fixed CGI structure
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -12,7 +13,7 @@
 bscserverip = '172.16.121.41'
 dbuser = 'sitedb'
 dbpassword = 'BSCAltice.123'
-mccmnc = "0073f010"
+mccmnc = "01370f01"
 # ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
 def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gBscName, lac, rac, band, ncc, bcc, hsn, ani, mccmnc)
     dataCounter = 0
@@ -53,7 +54,7 @@ def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gB
             # Close the query and execute on database
             query += ";"
             # We use REPLACE command because it acts as an INSERT when the data doesn't exists.
-            #ExecuteCmd(ssh, query)
+            ExecuteCmd(ssh, query)
             Print(StrfTime("%Y%m%d:%H%M%S:") + query)
             # Restart the query string
             query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`) VALUES "
@@ -70,7 +71,6 @@ if IsConnected(ssh) == True
     ExecuteCmd(ssh, 'mysql -u ' + dbuser + ' -p' + dbpassword + ' alticedr_sitedb')
     # Get NE list by type
     NEList = GetNELstByType('BSC6910 GSM')
-    #NEList = ['BSC_06_STGO']
     # Loop through the NE list
     for ne in NEList
         # Check if NE is online before connecting
