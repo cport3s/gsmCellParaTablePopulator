@@ -5,7 +5,8 @@
     2020-12-23: CGI Calculator error correction (15 digits to 16 digits) 
     2021-02-25: Implement new db provisioning method and new siteid db parameter.
     2021-06-28: Check if GCELLMAGRP is configured.
-	2021-08-05: Fixed CGI structure
+	2021-08-05: Fixed CGI structure.
+	2021-10-28: Start collecting gCell adm & act states.
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -15,9 +16,9 @@ dbuser = 'sitedb'
 dbpassword = 'BSCAltice.123'
 mccmnc = "01370f01"
 # ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
-def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gBscName, lac, rac, band, ncc, bcc, hsn, ani, mccmnc)
+def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gBscName, lac, rac, band, ncc, bcc, hsn, ani, mccmnc, gCellAdmState, gCellActState)
     dataCounter = 0
-    query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`) VALUES "
+    query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`, `gcelladmstate`, `gcellactstate`) VALUES "
     for i in range(len(gcellidf))
         gCellId = ToString(gcellidf[i])[1]
         gCellIdx = ToString(gcellidxf[i])[1]
@@ -32,6 +33,8 @@ def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gB
         gBcc = ToString(bcc[i])[1]
         gHsn = ToString(hsn[i])[1]
         gAni = ToString(ani[i])[1]
+		currentGCellAdmState = ToString(gCellAdmState[i])[1]
+		currentGCellActState = ToString(gCellActState[i])[1]
         lacHex = str(hex(int(gLac)))[2:]
         gCellIdHex = str(hex(int(gCellId)))[2:]
         # CGI Lac must be 4 digits
@@ -44,7 +47,7 @@ def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gB
             gCellIdHex = "0" + gCellIdHex
         end
         cgi = mccmnc + lacHex + gCellIdHex
-        query += "(" + eGbtsIdx + ", '" + eGbtsName + "', '" + gBscName + "', " + gCellIdx + ", " + gCellId + ", '" + gCellName + "', '" + gBand + "', " + gLac + ", " + gNcc + ", " + gBcc + ", " + gHsn + ", " + gRac + ", " + gAni + ", '" + cgi + "', " + gSiteId + ")"
+        query += "(" + eGbtsIdx + ", '" + eGbtsName + "', '" + gBscName + "', " + gCellIdx + ", " + gCellId + ", '" + gCellName + "', '" + gBand + "', " + gLac + ", " + gNcc + ", " + gBcc + ", " + gHsn + ", " + gRac + ", " + gAni + ", '" + cgi + "', " + gSiteId + ", '" + currentGCellAdmState + "', '" + currentGCellActState + "')"
         # Increase counter with each loop
         dataCounter += 1
         # Check when you get to the last line
@@ -57,7 +60,7 @@ def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gB
             ExecuteCmd(ssh, query)
             Print(StrfTime("%Y%m%d:%H%M%S:") + query)
             # Restart the query string
-            query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`) VALUES "
+            query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`, `gcelladmstate`, `gcellactstate`) VALUES "
             dataCounter = 0
         end
     end
@@ -89,6 +92,8 @@ if IsConnected(ssh) == True
             rac = []
             hsn = []
             ani = []
+			gCellAdmState = []
+			gCellActState = []
             # Connect to the NE on loop
             ConnectNE(ne)
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Connected to ' + ne)
@@ -117,6 +122,10 @@ if IsConnected(ssh) == True
                 bcc = bcc[0]
                 band.append(Sequence2List(GetColumnByName(gcellreportparse, 0, 'Freq. Band'))[1])
                 band = band[0]
+				gCellAdmState.append(Sequence2List(GetColumnByName(gcellreportparse, 0, 'Administrative State'))[1])
+				gCellAdmState = gCellAdmState[0]
+				gCellActState.append(Sequence2List(GetColumnByName(gcellreportparse, 0, 'active status'))[1])
+				gCellActState = gCellActState[0]
                 gbscname = ne
             end
             ClearMMLBuffer()
@@ -155,7 +164,7 @@ if IsConnected(ssh) == True
             end
             # Pass all data to the provisioning function
             Print(StrfTime("%Y%m%d:%H%M%S:") + 'Calling Provisioning Function on ' + ne)
-            gsmCellParaDbUpdate(gcellid, gcellidx, gcellname, egbtsname, btsidx, gbscname, lac, rac, band, ncc, bcc, hsn, ani, mccmnc)
+            gsmCellParaDbUpdate(gcellid, gcellidx, gcellname, egbtsname, btsidx, gbscname, lac, rac, band, ncc, bcc, hsn, ani, mccmnc, gCellAdmState, gCellActState)
         # If NE is not connected, then...
         else
             Print(StrfTime("%Y%m%d:%H%M%S:") + ne + " is offline")
