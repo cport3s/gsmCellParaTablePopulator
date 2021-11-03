@@ -1,12 +1,5 @@
 ﻿#encoding=utf-8
-''' 2020-04-03: The script takes around 4 days to scroll through 5500 GCells.
-    2020-04-16: Included BTS ID parameter.
-    2020-12-11: CGI Calculator integration. 
-    2020-12-23: CGI Calculator error correction (15 digits to 16 digits) 
-    2021-02-25: Implement new db provisioning method and new siteid db parameter.
-    2021-06-28: Check if GCELLMAGRP is configured.
-	2021-08-05: Fixed CGI structure.
-	2021-10-28: Start collecting gCell adm & act states.
+''' 2021-11-03: Start update UMTS cell information on RanIngData table
 '''
 # ----------------------------------------------------------LIBRARIES----------------------------------------------------------#
 
@@ -16,121 +9,45 @@ dbuser = 'sitedb'
 dbpassword = 'BSCAltice.123'
 mccmnc = "01370f01"
 # ----------------------------------------------------------FUNCTIONS----------------------------------------------------------#
-def gsmCellParaDbUpdate(gcellidf, gcellidxf, gcellnamef, egbtsnamef, btsidxf, gBscName, lac, rac, band, ncc, bcc, hsn, ani, mccmnc, gCellAdmState, gCellActState)
-    dataCounter = 0
-    query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`, `gcelladmstate`, `gcellactstate`) VALUES "
-    for i in range(len(gcellidf))
-        gCellId = ToString(gcellidf[i])[1]
-        gCellIdx = ToString(gcellidxf[i])[1]
-        gCellName = ToString(gcellnamef[i])[1]
-        eGbtsName = ToString(egbtsnamef[i])[1]
-        eGbtsIdx = ToString(btsidxf[i])[1]
-        gSiteId = eGbtsName[1:-1]
-        gLac = ToString(lac[i])[1]
-        gRac = ToString(rac[i])[1]
-        gBand = ToString(band[i])[1]
-        gNcc = ToString(ncc[i])[1]
-        gBcc = ToString(bcc[i])[1]
-        gHsn = ToString(hsn[i])[1]
-        gAni = ToString(ani[i])[1]
-		currentGCellAdmState = ToString(gCellAdmState[i])[1]
-		currentGCellActState = ToString(gCellActState[i])[1]
-        lacHex = str(hex(int(gLac)))[2:]
-        gCellIdHex = str(hex(int(gCellId)))[2:]
-        # CGI Lac must be 4 digits
-        while len(lacHex) < 4
-            lacHex = "0" + lacHex
-        end
-        gCellIdHex = str(hex(int(gCellId)))[2:]
-        # CGI CI must be 4 digits
-        while len(gCellIdHex) < 4
-            gCellIdHex = "0" + gCellIdHex
-        end
-        cgi = mccmnc + lacHex + gCellIdHex
-        query += "(" + eGbtsIdx + ", '" + eGbtsName + "', '" + gBscName + "', " + gCellIdx + ", " + gCellId + ", '" + gCellName + "', '" + gBand + "', " + gLac + ", " + gNcc + ", " + gBcc + ", " + gHsn + ", " + gRac + ", " + gAni + ", '" + cgi + "', " + gSiteId + ", '" + currentGCellAdmState + "', '" + currentGCellActState + "')"
-        # Increase counter with each loop
-        dataCounter += 1
-        # Check when you get to the last line
-        if i < len(gcellidf) - 1 and dataCounter < 21
-            query += ", "
-        else
-            # Close the query and execute on database
-            query += ";"
-            # We use REPLACE command because it acts as an INSERT when the data doesn't exists.
-            ExecuteCmd(ssh, query)
-            Print(StrfTime("%Y%m%d:%H%M%S:") + query)
-            # Restart the query string
-            query = "REPLACE INTO gsmcellpara (`btsidx`, `egbtsname`, `bscname`, `cellidx`, `cellid`, `gcellname`, `band`, `lac`, `ncc`, `bcc`, `hsn`, `rac`, `btsid`, `cgi`, `siteid`, `gcelladmstate`, `gcellactstate`) VALUES "
-            dataCounter = 0
-        end
-    end
-end
-
 def ranIngDataGsmCellUpdate(egbtsname, band)
-	tmpEgbtsList = []
-	#for egbts in egbtsname
-	#	if egbts not in tmpEgbtsList
-	#		tmpEgbtsList.append(egbts)
-	#	end
-	#end
-	# Remove duplicate values from band list and extract last char (band ID)
-	#tmpList = []
-	#for b in range(len(band))
-	#	if b not in tmpList
-	#		tmpList.append(b)
-	#	end
-	#end
-	#band = tmpList
-	x = 0
-	tmpArray1 = []
-	tmpArray2 = []
-	ctrlCounter = 0
-	if len(egbtsname) == len(band)
-		ctrlCounter = len(egbtsname) -1
+	tmpEgbtsDict = {}
+	for x in range(len(egbtsname))
+		# Check if key exists in dict. If it's not there, initialize key with empty list as value.
+		if egbtsname[x] not in tmpEgbtsDict
+			tmpEgbtsDict[egbtsname[x]] = []
+			# Append current band (since the key is empty)
+			tmpEgbtsDict[egbtsname[x]].append(band[x])
+		else
+			# If the key exists and the current band is not on the value list, then append
+			if band[x] not in tmpEgbtsDict[egbtsname[x]]
+				tmpEgbtsDict[egbtsname[x]].append(band[x])
+			end
+		end
 	end
-	#print(ctrl)
-	while x <= ctrlCounter
-		tmpArray1.append(egbtsname.pop())
-		tmpArray1.append(band.pop())
-		tmpArray2.append(tmpArray1)
-		tmpArray1 = []
-		x += 1
+	
+	for key in tmpEgbtsDict
+		setClause = ""
+		gSiteId = key[1:-1]
+		neName = "M" + key[1:]
+		# Check the key's band list
+		if 'GSM850' in tmpEgbtsDict[key] and 'PCS1900' in tmpEgbtsDict[key]
+			setClause += "`G850` = 'GSM850', `G1900` = 'PCS1900'"
+		end
+		if 'GSM850' in tmpEgbtsDict[key] and 'PCS1900' not in tmpEgbtsDict[key]
+			setClause += "`G850` = 'GSM850', `G1900` = 'N/A'"
+		end
+		if 'GSM850' not in tmpEgbtsDict[key] and 'PCS1900' in tmpEgbtsDict[key]
+			setClause += "`G850` = 'N/A', `G1900` = 'PCS1900'"
+		end
+		if 'GSM850' not in tmpEgbtsDict[key] and 'PCS1900' not in tmpEgbtsDict[key]
+			setClause += "`G850` = 'N/A', `G1900` = 'N/A'"
+		end
+		query = "UPDATE raningdata SET " + setClause + " WHERE (`Site` = '" + str(gSiteId) + "') and (`Nodo` = '" + neName + "');"
+		# Print query
+		Print(StrfTime("%Y%m%d:%H%M%S:") + query)
+		# Execute query
+		ExecuteCmd(ssh, query)
 	end
-	Print(tmpArray2)
-	#for egbts in tmpEgbtsList
-	#	# Transform NodeB Name to NE Name & Site ID
-	#	gSiteId = egbts[1:-1]
-	#	neName = "M" + egbts[1:]
-	#	setClause = ""
-	#	
-	#	# Loop through the list and check for existing bands
-	#	for i in range(len(band))
-	#		if band[i] == 'GSM850'
-	#			setClause += "`G850` = 'GSM850'"
-	#			if i < len(band) - 1
-	#				setClause += ", "
-	#			else
-	#				break
-	#			end
-	#		end
-	#		if band[i] == 'PCS1900'
-	#			setClause += "`G1900` = 'PCS1900'"
-	#			if i < len(band) - 1
-	#				setClause += ", "
-	#			else
-	#				break
-	#			end
-	#		end
-	#		if len(band) < 1
-	#			setClause = "`G850` = 'N/A',`G1900` = 'N/A'"
-	#		end
-	#	end
-	#	query = "UPDATE raningdata SET " + setClause + " WHERE (`Site` = '" + str(gSiteId) + "') and (`Nodo` = '" + neName + "');"
-	#	# Print query
-	#	Print(StrfTime("%Y%m%d:%H%M%S:") + query)
-	#	# Execute query
-	#	ExecuteCmd(ssh, query)
-	#end
 end
 # -----------------------------------------------------------MAINCODE----------------------------------------------------------#
 # Open the connection
